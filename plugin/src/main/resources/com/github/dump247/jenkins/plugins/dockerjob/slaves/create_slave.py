@@ -318,7 +318,8 @@ def main(args):
         'command': ['/bin/bash', install_dir + '/launch_slave.sh',
                     hash_file(slave_dir + '/init_slave.sh')],
         'volumes': [install_dir] + [v['container'] for v in options.volumes],
-        'environment': options.environment
+        'environment': options.environment,
+        'mem_limit': '2g'
     }
     start_opts = {
         'container': None,  # container id; set later
