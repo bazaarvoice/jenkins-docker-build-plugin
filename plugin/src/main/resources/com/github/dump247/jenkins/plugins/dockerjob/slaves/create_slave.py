@@ -15,6 +15,7 @@ import os
 import hashlib
 from functools import partial
 import binascii
+import subprocess
 
 import docker
 
@@ -299,6 +300,13 @@ def main(args):
 
     # Check if container exists or needs to be updated
     container_info = find_job_container(docker_client, container_name)
+
+    # Append AWS_ACCOUNT_ID
+    if not any(env.startswith('AWS_ACCOUNT_ID=')
+               for env in options.environment):
+        account_id = subprocess.getoutput(
+            'aws sts get-caller-identity --query "Account" --output text')
+        options.environment.append("AWS_ACCOUNT_ID={}".format(account_id))
 
     create_container = True
     create_opts = {
