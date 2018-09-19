@@ -31,4 +31,5 @@ mkdir -p ${LAUNCH_DIR}/slave >/dev/null
 cat >${LAUNCH_DIR}/slave/properties.sh <<EOF
 CONNECT_ADDRESS=$(/sbin/ip addr show docker0 | grep -o 'inet [0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+' | grep -o [0-9].*)
 CONNECT_PORT=12112
+JDK_HOME=/usr/lib/jvm/jre-1.8.0-openjdk/
 EOF
