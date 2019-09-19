@@ -59,6 +59,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.logging.Logger;
 
+import static com.github.dump247.jenkins.plugins.dockerjob.util.ConfigUtil.parseEnvVars;
 import static com.google.common.base.Preconditions.checkArgument;
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Strings.isNullOrEmpty;
@@ -106,6 +107,7 @@ public class DockerJobCloud extends Cloud {
     private final String _requiredLabelString;
     private final String _directoryMappingString;
     private final String _slaveInitScript;
+    private final String _environmentVarString;
 
     private transient Jenkins _jenkins;
     private transient Instant _nextHostsRefresh;
@@ -115,12 +117,14 @@ public class DockerJobCloud extends Cloud {
     private transient Set<LabelAtom> _labels;
     private transient Set<LabelAtom> _requiredLabels;
     private transient List<DirectoryMapping> _directoryMappings;
+    private transient Map<String, String> _environmentVars;
 
     @DataBoundConstructor
     public DockerJobCloud(String name, DockerHostProvider hostProvider, int sshPort,
                           String credentialsId, int maxJobsPerHost,
                           String labelString, String requiredLabelString,
                           String directoryMappingString,
+                          String environmentVarString,
                           String slaveInitScript) {
         super(name);
 
@@ -132,6 +136,7 @@ public class DockerJobCloud extends Cloud {
         _requiredLabelString = nullToEmpty(requiredLabelString);
         _directoryMappingString = nullToEmpty(directoryMappingString);
         _slaveInitScript = nullToEmpty(slaveInitScript);
+        _environmentVarString = environmentVarString;
 
         checkArgument(sshPort >= 1 && sshPort <= 65535);
         checkArgument(maxJobsPerHost > 0);
@@ -147,6 +152,7 @@ public class DockerJobCloud extends Cloud {
         _labels = unmodifiableSet(Label.parse(_labelString));
         _requiredLabels = unmodifiableSet(Label.parse(_requiredLabelString));
         _directoryMappings = parseDirectoryMappings(_directoryMappingString);
+        _environmentVars = parseEnvVars(_environmentVarString);
         return this;
     }
 
@@ -182,6 +188,10 @@ public class DockerJobCloud extends Cloud {
         return _slaveInitScript;
     }
 
+    public String getEnvironmentVarString() {
+        return _environmentVarString;
+    }
+
     @Override
     public Collection<NodeProvisioner.PlannedNode> provision(Label label, int excessWorkload) {
         // Don't provision a node here. Provisioning is handled in DockerJobLoadBalancer.
@@ -195,21 +205,25 @@ public class DockerJobCloud extends Cloud {
     }
 
     public ProvisionResult provisionJob(final String jobName, AbstractProject job, MappingWorksheet.WorkChunk task) throws Exception {
+        LOG.log(FINER, "provisionJob({0})", jobName);
         JobValidationResult result = validateJob(task.assignedLabel).orNull();
 
         if (result == null) {
+            LOG.log(FINER, "Could not provision job {0}", jobName);
             return ProvisionResult.NOT_SUPPORTED;
         }
 
         DockerJobProperty jobConfig = (DockerJobProperty) job.getProperty(DockerJobProperty.class);
         final String imageName = getImageName(jobConfig, result);
+        LOG.log(FINER, "Provisioning: image={0}", imageName);
         boolean resetJob = false;
         Map<String, String> jobEnv = result.environment;
 
         if (jobConfig != null) {
             resetJob = jobConfig.resetJobEnabled();
 
-            Map<String, String> newEnv = newHashMap(jobEnv);
+            Map<String, String> newEnv = newHashMap(_environmentVars);
+            newEnv.putAll(jobEnv);
             newEnv.putAll(jobConfig.getEnvironmentVars());
             jobEnv = ImmutableMap.copyOf(newEnv);
         }
@@ -219,6 +233,7 @@ public class DockerJobCloud extends Cloud {
         }
 
         if (availableCapacity() <= 0) {
+            LOG.log(FINER, "Unavailable capacity for job %s", jobName);
             return ProvisionResult.NO_CAPACITY;
         }
 
